@@ -15,50 +15,67 @@ def process_mitre_data(csv_path):
     techniques_count = {}
     rules_with_mappings = []
     
-    # Read CSV file
     try:
-        with open(csv_path, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                rule_name = row['Title']
-                mitre_mapping = row['MITRE Mapping']
-                has_mapping = row['Mapping Present'].lower() == 'yes'
+        with open(csv_path, 'r', encoding='utf-8-sig') as f:  # Handle BOM if present
+            # First peek at file to check format
+            first_line = f.readline().strip()
+            f.seek(0)  # Reset to start
+            
+            # Print diagnostic info
+            print(f"First line of CSV: {first_line}")
+            
+            reader = csv.reader(f)
+            headers = [h.strip() for h in next(reader)]  # Strip whitespace
+            
+            # Check required columns exist
+            required_columns = ['Title', 'MITRE Mapping']
+            missing_columns = [col for col in required_columns if col not in headers]
+            
+            if missing_columns:
+                raise ValueError(f"Missing required columns: {missing_columns}\nFound columns: {headers}")
                 
-                if has_mapping and mitre_mapping:
-                    # Safely evaluate the JSON array string
-                    try:
-                        techniques = ast.literal_eval(mitre_mapping)
-                        
-                        # Store rule metadata
-                        rules_with_mappings.append({
-                            'name': rule_name,
-                            'techniques': techniques
-                        })
-                        
-                        # Count techniques
-                        for technique in techniques:
-                            technique = technique.strip()
-                            techniques_count[technique] = techniques_count.get(technique, 0) + 1
+            title_idx = headers.index('Title')
+            mapping_idx = headers.index('MITRE Mapping')
+            
+            for row in reader:
+                if len(row) >= max(title_idx + 1, mapping_idx + 1):
+                    rule_name = row[title_idx].strip()
+                    mitre_mapping = row[mapping_idx].strip()
+                    
+                    if mitre_mapping:
+                        try:
+                            # Clean up the MITRE mapping string format
+                            mitre_mapping = mitre_mapping.replace(' ', '')
+                            techniques = ast.literal_eval(mitre_mapping)
                             
-                            # Extract tactic from technique (first part before dot)
-                            if '.' in technique:
-                                base_technique = technique.split('.')[0]
-                                tactics_count[base_technique] = tactics_count.get(base_technique, 0) + 1
-                            else:
-                                tactics_count[technique] = tactics_count.get(technique, 0) + 1
+                            if techniques:  # Only process non-empty arrays
+                                rules_with_mappings.append({
+                                    'name': rule_name,
+                                    'techniques': techniques
+                                })
                                 
-                    except (ValueError, SyntaxError) as e:
-                        print(f"Error parsing MITRE mapping for rule {rule_name}: {e}")
-                        continue
+                                # Count techniques
+                                for technique in techniques:
+                                    technique = technique.strip()
+                                    if technique:  # Skip empty strings
+                                        techniques_count[technique] = techniques_count.get(technique, 0) + 1
+                                        
+                                        # Extract tactic from technique
+                                        if '.' in technique:
+                                            base_technique = technique.split('.')[0]
+                                            tactics_count[base_technique] = tactics_count.get(base_technique, 0) + 1
+                                        else:
+                                            tactics_count[technique] = tactics_count.get(technique, 0) + 1
+                                    
+                        except (ValueError, SyntaxError) as e:
+                            print(f"Error parsing MITRE mapping for rule {rule_name}: {e}")
+                            continue
 
-        # Calculate max score for gradient
+        # Rest of the code remains the same
         max_score = max(techniques_count.values()) if techniques_count else 1
-        
-        # Generate filename with timestamp
         current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
         layer_filename = f"layer_splunk_{current_time}.json"
 
-        # Create layer JSON
         layer_json = {
             "name": "Splunk Rules MITRE Coverage",
             "versions": {
@@ -74,7 +91,7 @@ def process_mitre_data(csv_path):
                     "value": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 },
                 {
-                    "name": "rules_analyzed",
+                    "name": "rules_analyzed", 
                     "value": str(len(rules_with_mappings))
                 }
             ],
@@ -103,20 +120,16 @@ def process_mitre_data(csv_path):
             }
         }
         
-        # Save layer
         with open(layer_filename, 'w') as f:
             json.dump(layer_json, f, indent=2)
             
-        # Print statistics
         print("\n=== MITRE Coverage Statistics ===")
         print(f"\nTotal Coverage:")
         print(f"- Rules with MITRE mappings: {len(rules_with_mappings)}")
         print(f"- Unique techniques covered: {len(techniques_count)}")
         print(f"- Unique tactics covered: {len(tactics_count)}")
         
-        # Sort statistics
         technique_stats = dict(sorted(techniques_count.items(), key=lambda x: x[1], reverse=True))
-        
         print("\nTop 5 techniques by implementation:")
         for technique, count in list(technique_stats.items())[:5]:
             print(f"  • {technique}: {count} rules")
@@ -128,14 +141,13 @@ def process_mitre_data(csv_path):
         print(f"Error processing MITRE data: {e}")
 
 def main():
-    # Set up argument parser
     parser = argparse.ArgumentParser(
         description='Generate MITRE ATT&CK Navigator layer from CSV mapping file',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
         '-f', '--file',
-        default='ExportMITREMapping.csv',
+        default='SplunkRules.csv',  # Updated default filename
         help='Path to CSV file containing MITRE mappings'
     )
     
