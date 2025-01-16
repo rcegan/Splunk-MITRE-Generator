@@ -16,62 +16,59 @@ def process_mitre_data(csv_path):
     rules_with_mappings = []
     
     try:
-        with open(csv_path, 'r', encoding='utf-8-sig') as f:  # Handle BOM if present
-            # First peek at file to check format
-            first_line = f.readline().strip()
-            f.seek(0)  # Reset to start
-            
-            # Print diagnostic info
-            print(f"First line of CSV: {first_line}")
-            
+        with open(csv_path, 'r', encoding='utf-8-sig') as f:
             reader = csv.reader(f)
-            headers = [h.strip() for h in next(reader)]  # Strip whitespace
+            headers = [h.strip() for h in next(reader)]
             
             # Check required columns exist
-            required_columns = ['Title', 'MITRE Mapping']
+            required_columns = ['title', 'techniques', 'subtechniques']
             missing_columns = [col for col in required_columns if col not in headers]
             
             if missing_columns:
                 raise ValueError(f"Missing required columns: {missing_columns}\nFound columns: {headers}")
                 
-            title_idx = headers.index('Title')
-            mapping_idx = headers.index('MITRE Mapping')
+            title_idx = headers.index('title')
+            tech_idx = headers.index('techniques')
+            subtech_idx = headers.index('subtechniques')
             
             for row in reader:
-                if len(row) >= max(title_idx + 1, mapping_idx + 1):
+                if len(row) >= max(title_idx + 1, tech_idx + 1, subtech_idx + 1):
                     rule_name = row[title_idx].strip()
-                    mitre_mapping = row[mapping_idx].strip()
+                    techniques = row[tech_idx].strip()
+                    subtechniques = row[subtech_idx].strip()
                     
-                    if mitre_mapping:
-                        try:
-                            # Clean up the MITRE mapping string format
-                            mitre_mapping = mitre_mapping.replace(' ', '')
-                            techniques = ast.literal_eval(mitre_mapping)
+                    # Skip empty rows
+                    if not techniques and not subtechniques:
+                        continue
+                        
+                    all_techniques = []
+                    
+                    # Process main techniques
+                    if techniques:
+                        all_techniques.extend([t.strip() for t in techniques.split(',') if t.strip()])
+                        
+                    # Process subtechniques
+                    if subtechniques:
+                        all_techniques.extend([t.strip() for t in subtechniques.split(',') if t.strip()])
+                    
+                    if all_techniques:
+                        rules_with_mappings.append({
+                            'name': rule_name,
+                            'techniques': all_techniques
+                        })
+                        
+                        # Count techniques
+                        for technique in all_techniques:
+                            techniques_count[technique] = techniques_count.get(technique, 0) + 1
                             
-                            if techniques:  # Only process non-empty arrays
-                                rules_with_mappings.append({
-                                    'name': rule_name,
-                                    'techniques': techniques
-                                })
-                                
-                                # Count techniques
-                                for technique in techniques:
-                                    technique = technique.strip()
-                                    if technique:  # Skip empty strings
-                                        techniques_count[technique] = techniques_count.get(technique, 0) + 1
-                                        
-                                        # Extract tactic from technique
-                                        if '.' in technique:
-                                            base_technique = technique.split('.')[0]
-                                            tactics_count[base_technique] = tactics_count.get(base_technique, 0) + 1
-                                        else:
-                                            tactics_count[technique] = tactics_count.get(technique, 0) + 1
-                                    
-                        except (ValueError, SyntaxError) as e:
-                            print(f"Error parsing MITRE mapping for rule {rule_name}: {e}")
-                            continue
+                            # Extract tactic from technique
+                            if '.' in technique:
+                                base_technique = technique.split('.')[0]
+                                tactics_count[base_technique] = tactics_count.get(base_technique, 0) + 1
+                            else:
+                                tactics_count[technique] = tactics_count.get(technique, 0) + 1
 
-        # Rest of the code remains the same
+        # Generate layer file
         max_score = max(techniques_count.values()) if techniques_count else 1
         current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
         layer_filename = f"layer_splunk_{current_time}.json"
