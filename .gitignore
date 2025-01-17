@@ -4,6 +4,9 @@
 # JSON
 *.json
 
+# Manually processed files
+manual/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

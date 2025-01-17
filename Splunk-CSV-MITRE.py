@@ -4,6 +4,17 @@ from datetime import datetime
 import ast
 import argparse
 import os
+import glob
+
+def get_csv_files_from_manual():
+    """Get all CSV files from manual folder."""
+    manual_dir = os.path.join(os.path.dirname(__file__), 'manual')
+    if not os.path.exists(manual_dir):
+        raise FileNotFoundError("Manual folder not found")
+    csv_files = glob.glob(os.path.join(manual_dir, '*.csv'))
+    if not csv_files:
+        raise FileNotFoundError("No CSV files found in manual folder")
+    return csv_files
 
 def process_mitre_data(csv_path):
     # Validate file exists
@@ -71,7 +82,8 @@ def process_mitre_data(csv_path):
         # Generate layer file
         max_score = max(techniques_count.values()) if techniques_count else 1
         current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-        layer_filename = f"layer_splunk_{current_time}.json"
+        base_name = os.path.splitext(os.path.basename(csv_path))[0]
+        layer_filename = f"{base_name}-layer.json"
 
         layer_json = {
             "name": "Splunk Rules MITRE Coverage",
@@ -147,11 +159,23 @@ def main():
         default='SplunkRules.csv',  # Updated default filename
         help='Path to CSV file containing MITRE mappings'
     )
+    parser.add_argument(
+        '-m', '--manual',
+        action='store_true',
+        help='Process all CSV files in manual folder'
+    )
     
     args = parser.parse_args()
     
     try:
-        process_mitre_data(args.file)
+        if args.manual:
+            csv_files = get_csv_files_from_manual()
+            for csv_file in csv_files:
+                print(f"\nProcessing {csv_file}...")
+                process_mitre_data(csv_file)
+            print("\nAll files processed successfully")
+        else:
+            process_mitre_data(args.file)
     except Exception as e:
         print(f"Error: {e}")
         return 1
