@@ -1,11 +1,11 @@
 # CSV files
-*.csv
+#*.csv
 
 # JSON
 *.json
 
 # Manually processed files
-manual/
+#manual/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
