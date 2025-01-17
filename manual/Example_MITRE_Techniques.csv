@@ -1,0 +1,3 @@
+title,techniques,subtechniques
+"Mailbox Access Granted",T1098,"T1098.002"
+"O365 User Consent Denied for OAuth Application",T1528,""

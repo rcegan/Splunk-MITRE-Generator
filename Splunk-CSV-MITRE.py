@@ -16,6 +16,26 @@ def get_csv_files_from_manual():
         raise FileNotFoundError("No CSV files found in manual folder")
     return csv_files
 
+def get_subfolder_name(csv_path):
+    """Extract subfolder name from CSV filename."""
+    base_name = os.path.basename(csv_path)
+    if '_' in base_name:
+        return base_name.split('_')[0]
+    return 'default'
+
+def ensure_output_directory(subfolder=None):
+    """Create MITRE output directory and subfolder if needed."""
+    base_dir = os.path.join(os.path.dirname(__file__), 'MITRE')
+    if not os.path.exists(base_dir):
+        os.makedirs(base_dir)
+    
+    if subfolder:
+        subfolder_path = os.path.join(base_dir, subfolder)
+        if not os.path.exists(subfolder_path):
+            os.makedirs(subfolder_path)
+        return subfolder_path
+    return base_dir
+
 def process_mitre_data(csv_path):
     # Validate file exists
     if not os.path.exists(csv_path):
@@ -83,14 +103,16 @@ def process_mitre_data(csv_path):
         max_score = max(techniques_count.values()) if techniques_count else 1
         current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_name = os.path.splitext(os.path.basename(csv_path))[0]
-        layer_filename = f"{base_name}-layer.json"
+        subfolder = get_subfolder_name(csv_path)
+        output_dir = ensure_output_directory(subfolder)
+        layer_filename = os.path.join(output_dir, f"layer_{base_name}_{current_time}.json")
 
         layer_json = {
-            "name": "Splunk Rules MITRE Coverage",
+            "name": f"Splunk Coverage - {base_name}",
             "versions": {
-                "attack": "16",
-                "navigator": "4.9.1",
-                "layer": "4.5"
+                "attack": "14",
+                "navigator": "4.8.2",
+                "layer": "4.4"
             },
             "domain": "enterprise-attack",
             "description": f"Coverage of {len(techniques_count)} MITRE ATT&CK techniques in Splunk rules",
@@ -130,7 +152,7 @@ def process_mitre_data(csv_path):
         }
         
         with open(layer_filename, 'w') as f:
-            json.dump(layer_json, f, indent=2)
+            json.dump(layer_json, f, indent=4)
             
         print("\n=== MITRE Coverage Statistics ===")
         print(f"\nTotal Coverage:")
